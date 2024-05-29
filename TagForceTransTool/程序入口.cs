@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -21,6 +23,9 @@ class 程序入口
                 case '2':
                     导入文本();
                     break;
+                case '9':
+                    导入已有文本();
+                    break;
                 default:
                     Console.WriteLine("请按下正确的按键");
                     break;
@@ -39,12 +44,12 @@ class 程序入口
         Console.ReadKey();
         Console.WriteLine("开始扫描名字带有“Lj”的bin/gz");
         var Lj文件集合 = 工具类.获取Lj文件();
-        Console.WriteLine("获取完毕！\n开始转换Lj文件为TXT");
+        Console.WriteLine("获取完毕！\n开始转换Lj文件为JSON");
         foreach (var Lj文件 in Lj文件集合)
         {
-            工具类.Lj台词转换为TXT(Lj文件);
+            工具类.Lj台词转换为JSON(Lj文件);
         }
-        Console.WriteLine("TXT导出完毕！请检查此程序目录下的TXT文件夹");
+        Console.WriteLine("JSON导出完毕！请检查此程序目录下的JSON文件夹");
     }
 
     static void 导入文本()
@@ -55,5 +60,57 @@ class 程序入口
             工具类.TXT转换为Lj台词(TXT文件);
         }
         Console.WriteLine("Lj台词导出完毕！请检查此程序目录下的Tranz文件夹");
+    }
+
+    static void 导入已有文本()
+    {
+        Console.WriteLine("请拖入原文TXT");
+        string 原TXT = Console.ReadLine().Trim('"');
+
+        string 原文本 = File.ReadAllText(原TXT);
+        原文本 = 原文本.Replace("\n-----\n", "\n");
+
+        List<string> 原列表 = 原文本.Split(new string[] { "\n*****\n" }, StringSplitOptions.None).ToList();
+
+        Console.WriteLine("请拖入译文TXT");
+        string 现TXT = Console.ReadLine().Trim('"');
+
+        string 现文本 = File.ReadAllText(现TXT);
+        现文本 = 现文本.Replace("\r\n", "\n").Replace("\n-----\n", "\n");
+
+        List<string> 现列表 = 现文本.Split(new string[] { "\n*****\n" }, StringSplitOptions.None).ToList();
+
+        if (原列表.Count != 现列表.Count)
+        {
+            Console.WriteLine($"原{原列表.Count}现{现列表.Count}");
+            Console.ReadKey();
+        }
+        List<JObject> jobj = new();
+        string 译文 = "";
+        int stage = 0;
+        for (int i = 0; i < 原列表.Count; i++)
+        {
+            if (原列表[i] != 现列表[i])
+            {
+                译文 = 现列表[i];
+                stage = 1;
+            }
+            else
+            {
+                译文 = "";
+                stage = 0;
+            }
+            jobj.Add(new JObject
+            {
+                ["key"] = i.ToString().PadLeft(6, '0'),
+                ["original"] = 原列表[i],
+                ["translation"] = 译文,
+                ["stage"] = 0
+            });
+        }
+        string jsonContent = JsonConvert.SerializeObject(jobj, Formatting.Indented);
+        File.WriteAllText(原TXT + ".json", jsonContent, Encoding.UTF8);
+        Console.WriteLine("完毕！");
+        Console.ReadLine();
     }
 }

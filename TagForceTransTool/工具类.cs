@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -9,7 +11,7 @@ public class 工具类
     static string 根目录 = string.Empty;
     static string ehppack目录 = string.Empty;
     static string 解包目录 = string.Empty;
-    static string TXT目录 = string.Empty;
+    static string JSON目录 = string.Empty;
     static string 导入目录 = string.Empty;
 
     public static void 初始化()
@@ -25,10 +27,10 @@ public class 工具类
             Directory.Delete(解包目录, true);
         }
 
-        TXT目录 = Path.Combine(根目录, "TXT");
-        if (Directory.Exists(TXT目录))
+        JSON目录 = Path.Combine(根目录, "JSON");
+        if (Directory.Exists(JSON目录))
         {
-            Directory.Delete(TXT目录, true);
+            Directory.Delete(JSON目录, true);
         }
 
         导入目录 = Path.Combine(Path.Combine(根目录, "Tranz"));
@@ -103,7 +105,7 @@ public class 工具类
         }
         string 相对路径 = 获取相对路径(当前文件路径, 解包目录);
         // 保留原扩展名，直接在后面加txt，方便将来转回bin和gz
-        string 输出路径 = Path.Combine(TXT目录, 相对路径) + ".txt";
+        string 输出路径 = Path.Combine(JSON目录, 相对路径) + ".txt";
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
         bool 有日语字符 = false;
@@ -141,6 +143,72 @@ public class 工具类
         }
     }
 
+    public static void Lj台词转换为JSON(string 当前文件路径)
+    {
+        string 扩展名 = Path.GetExtension(当前文件路径);
+        byte[] 源文本;
+        if (扩展名 == ".gz")
+        {
+            using (var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress))
+            {
+                var ms = new MemoryStream();
+                file.CopyTo(ms);
+                源文本 = ms.ToArray();
+            }
+        }
+        else
+        {
+            源文本 = File.ReadAllBytes(当前文件路径);
+        }
+        string 相对路径 = 获取相对路径(当前文件路径, 解包目录);
+        // 保留原扩展名，直接在后面加txt，方便将来转回bin和gz
+        string 输出路径 = Path.Combine(JSON目录, 相对路径) + ".json";
+        if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
+
+        List<string> 原文条目 = new List<string>();
+        bool 有日语字符 = false;
+        StringBuilder sb = new();
+        int index = 0;
+        int bias = 当前文件路径.Contains("bl") ? BitConverter.ToInt32(源文本, 8) : 0;
+        index += bias;
+        while (index < 源文本.Length)
+        {
+            int count = index + 2 <= 源文本.Length ? 2 : 源文本.Length - index;
+            string 双字节 = Encoding.Unicode.GetString(源文本, index, count);
+
+            // 终止符，表示该条目结束
+            if (双字节 == "\0")
+            {
+                原文条目.Add(sb.ToString());
+                sb = new();
+            }
+            else
+            {
+                sb.Append(双字节);
+                if (有日语字符 ||
+                    (双字节.CompareTo("\u3040") >= 0 && 双字节.CompareTo("\u309F") <= 0) || // Hiragana
+                    (双字节.CompareTo("\u30A0") >= 0 && 双字节.CompareTo("\u30FF") <= 0))   // Katakana
+                {
+                    有日语字符 = true;
+                }
+            }
+            index += 2;
+        }
+
+        if (有日语字符)
+        {
+            var jobj = 原文条目.Select((item, index) => new JObject
+            {
+                ["key"] = index.ToString().PadLeft(6, '0'),
+                ["original"] = item,
+                ["translation"] = "",
+                ["stage"] = 0
+            }).ToList();
+            string jsonContent = JsonConvert.SerializeObject(jobj, Formatting.Indented);
+            File.WriteAllText(输出路径, jsonContent, Encoding.UTF8);
+        }
+    }
+
 
 
     public static void TXT转换为Lj台词(string 当前文件路径)
@@ -148,7 +216,7 @@ public class 工具类
         string 短文件名 = Path.GetFileNameWithoutExtension(当前文件路径);
         bool 是gz = 短文件名.EndsWith(".gz") ? true : false;
 
-        string 相对路径 = 获取相对路径(当前文件路径, TXT目录);
+        string 相对路径 = 获取相对路径(当前文件路径, JSON目录);
         string 输出路径 = Path.Combine(导入目录, 相对路径);
         // 去掉txt后缀，恢复原后缀
         输出路径 = 输出路径.Substring(0, 输出路径.Length - 4);
@@ -197,7 +265,7 @@ public class 工具类
 
     public static IEnumerable<string> 获取TXT文件()
     {
-        return Directory.EnumerateFiles(TXT目录, "*.txt", SearchOption.AllDirectories);
+        return Directory.EnumerateFiles(JSON目录, "*.txt", SearchOption.AllDirectories);
     }
 
 
