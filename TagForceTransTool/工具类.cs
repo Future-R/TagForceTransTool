@@ -12,7 +12,8 @@ public class 工具类
     static string ehppack目录 = string.Empty;
     static string 解包目录 = string.Empty;
     static string JSON目录 = string.Empty;
-    static string 导入目录 = string.Empty;
+    static string BIN目录 = string.Empty;
+    static string EHP目录 = string.Empty;
 
     public static void 初始化()
     {
@@ -24,19 +25,25 @@ public class 工具类
         解包目录 = Path.Combine(根目录, "Extraction");
         if (Directory.Exists(解包目录))
         {
-            Directory.Delete(解包目录, true);
+            //Directory.Delete(解包目录, true);
         }
 
         JSON目录 = Path.Combine(根目录, "JSON");
         if (Directory.Exists(JSON目录))
         {
-            Directory.Delete(JSON目录, true);
+            //Directory.Delete(JSON目录, true);
         }
 
-        导入目录 = Path.Combine(Path.Combine(根目录, "Tranz"));
-        if (Directory.Exists(导入目录))
+        BIN目录 = Path.Combine(Path.Combine(根目录, "Tranz"));
+        if (Directory.Exists(BIN目录))
         {
-            Directory.Delete(导入目录, true);
+            Directory.Delete(BIN目录, true);
+        }
+
+        EHP目录 = Path.Combine(Path.Combine(根目录, "EHP"));
+        if (Directory.Exists(EHP目录))
+        {
+            Directory.Delete(EHP目录, true);
         }
     }
 
@@ -77,11 +84,11 @@ public class 工具类
                     // 筛掉声音
                     && !fileNameWithoutExtension.Contains("voice")
                     // 筛掉其它5门语言，只保留日语
-                    && !fileNameWithoutExtension.Contains("bl_e")
-                    && !fileNameWithoutExtension.Contains("bl_f")
-                    && !fileNameWithoutExtension.Contains("bl_g")
-                    && !fileNameWithoutExtension.Contains("bl_i")
-                    && !fileNameWithoutExtension.Contains("bl_s");
+                    && !fileNameWithoutExtension.EndsWith("bl_e")
+                    && !fileNameWithoutExtension.EndsWith("bl_f")
+                    && !fileNameWithoutExtension.EndsWith("bl_g")
+                    && !fileNameWithoutExtension.EndsWith("bl_i")
+                    && !fileNameWithoutExtension.EndsWith("bl_s");
             });
     }
 
@@ -211,61 +218,154 @@ public class 工具类
 
 
 
-    public static void TXT转换为Lj台词(string 当前文件路径)
+    public static void JSON转换为Lj台词(string 当前文件路径)
     {
         string 短文件名 = Path.GetFileNameWithoutExtension(当前文件路径);
-        bool 是gz = 短文件名.EndsWith(".gz") ? true : false;
+        bool 是bl = 短文件名.Contains("bl");
+        bool 是gz = 短文件名.EndsWith(".gz");
+        bool 是LJ = 短文件名.Contains("LJ");
 
         string 相对路径 = 获取相对路径(当前文件路径, JSON目录);
-        string 输出路径 = Path.Combine(导入目录, 相对路径);
-        // 去掉txt后缀，恢复原后缀
-        输出路径 = 输出路径.Substring(0, 输出路径.Length - 4);
+        string 输出路径 = Path.Combine(BIN目录, 相对路径);
+        // 去掉.json后缀，恢复原后缀
+        输出路径 = 输出路径.Substring(0, 输出路径.Length - 5);
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
-        List<int> indices = new List<int>();
-        using (var 输入文本 = new StreamReader(当前文件路径, Encoding.Unicode))
-        {
-            using (var 输出文件 = 是gz ? (Stream)new GZipStream(File.Create(输出路径), CompressionMode.Compress) : File.Create(输出路径))
-            {
-                string line;
-                int index = 0;
-                while ((line = 输入文本.ReadLine()) != null)
-                {
-                    byte[] bytes;
-                    if (line == "-----")
-                        bytes = Encoding.Unicode.GetBytes("\n");
-                    else if (line == "*****")
-                    {
-                        bytes = Encoding.Unicode.GetBytes("\0");
-                        indices.Add(index);
-                    }
-                    else
-                        bytes = Encoding.Unicode.GetBytes(line);
+        // 相当于一个索引ID，标记每段文字开始的位置
+        List<int> 指针组 = new List<int>();
+        // 接下来先读取JSON，拿到条目List
+        string JSON字典文本 = File.ReadAllText(当前文件路径);
+        JArray JSON数组 = JArray.Parse(JSON字典文本);
 
-                    输出文件.Write(bytes, 0, bytes.Length);
-                    index += bytes.Length;
-                }
+        // 如果是gz，使用GZipStream
+        using var 输出文件 = 是gz ? (Stream)new GZipStream(File.Create(输出路径), CompressionMode.Compress) : File.Create(输出路径);
+        List<byte> 已写入字节 = new();
+        int number = 0;
+        if (!是LJ)
+        {
+            已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
+            number = 1;
+        }
+        List<byte> 文本偏移 = new() { 0x00, 0x00, 0x00, 0x00 };
+
+        // 逐条写入，每条写完都加\0
+        foreach (var jobj in JSON数组.ToObject<List<JObject>>())
+        {
+            // -1已隐藏，0未翻译，这俩将使用原文original，否则使用译文translation
+            // PSP里换行是\x0A\x00，对应\n+空字符，因为unicode固定占用两个字节，所以\n后面会自动补
+            string 当前条目 = (int)jobj["stage"].ToObject(typeof(int)) > 0
+                ? jobj["translation"].ToString()
+                : jobj["original"].ToString();
+            byte[] 待写入字节 = Encoding.Convert(Encoding.UTF8, Encoding.Unicode, Encoding.UTF8.GetBytes(当前条目.Replace("\\n", "\n")));
+            已写入字节.AddRange(待写入字节);
+            // 条目结束，写入\0
+            已写入字节.AddRange(new byte[] { 0x00, 0x00 });
+            // 暂时不知道bl代表什么，总之先偏移！
+            if (是bl)
+            {
+                number++;
+                文本偏移.AddRange(BitConverter.GetBytes(待写入字节.Length));
             }
         }
 
-        if (短文件名.Contains("Lj"))
+        if (是LJ)
         {
-            string 索引文件路径 = 输出路径.Replace("Lj", "Ij");
-            using (var 输出文件 = 是gz ? (Stream)new GZipStream(File.Create(索引文件路径), CompressionMode.Compress) : File.Create(索引文件路径))
+            List<byte> 文本索引 = new() { 0x00, 0x00, 0x00, 0x00 };
+            int index = 0;
+            int eof = 已写入字节.Count;
+            byte[] buffer = new byte[2];
+            byte[] intBytes;
+
+            while (index < eof)
             {
-                foreach (int index in indices)
+                buffer[0] = 已写入字节[index];
+                buffer[1] = 已写入字节[index + 1];
+                index += 2;
+
+                if (buffer.SequenceEqual(new byte[] { 0x00, 0x00 }))
                 {
-                    byte[] bytes = BitConverter.GetBytes(index);
-                    输出文件.Write(bytes, 0, bytes.Length);
+                    //// 根据系统架构获取正确的字节顺序
+                    //if (BitConverter.IsLittleEndian)
+                    //{
+                    //    Array.Reverse(buffer);
+                    //}
+                    intBytes = BitConverter.GetBytes(index / 2);
+                    文本索引.AddRange(intBytes);
                 }
             }
+            // 写入本体LJ文件
+            输出文件.Write(已写入字节.ToArray(), 0, 已写入字节.Count);
+            // 写入索引IJ文件
+            string 索引输出路径 = 输出路径.Replace("Lj", "Ij");
+            using var 索引输出文件 = 是gz ? (Stream)new GZipStream(File.Create(索引输出路径), CompressionMode.Compress) : File.Create(索引输出路径);
+            索引输出文件.Write(文本索引.ToArray(), 0, 文本索引.Count);
+        }
+        else
+        {
+            输出文件.Write(BitConverter.GetBytes(number), 0, 4);
+            输出文件.Write(new byte[] { 0x0C, 0x00, 0x00, 0x00 }, 0, 4);
+            输出文件.Write(BitConverter.GetBytes(number * 4 + 12), 0, 4);
+            输出文件.Write(文本偏移.ToArray(), 0, 文本偏移.Count);
+            输出文件.Write(已写入字节.ToArray(), 0, 已写入字节.Count);
         }
     }
 
-
-    public static IEnumerable<string> 获取TXT文件()
+    public static void 合并BIN()
     {
-        return Directory.EnumerateFiles(JSON目录, "*.txt", SearchOption.AllDirectories);
+        // 如果解包目录不存在，重新生成解包目录
+        if (!Directory.Exists(解包目录))
+        {
+            Console.WriteLine("请拖入需要解包的目录并回车\n解包结果会生成在此程序目录下的Extraction文件夹\n不会对源文件造成损害，大可安心");
+            string path = Console.ReadLine().Trim('"');  // 拖入文件的路径
+            Console.WriteLine("开始解包……");
+            解包ehp(path);
+            Console.WriteLine("解包完毕，请按任意键继续\n（如果解包时间少于1秒，请过1秒再按，不然电脑反应不过来）");
+            Console.ReadKey();
+        }
+        // 有解包目录的情况下，将BIN目录的文件覆盖到解包目录
+        var 待复制文件 = Directory.EnumerateFiles(BIN目录, "*.*", SearchOption.AllDirectories);
+        // 写得比较暴力，回头再优化
+        foreach (var item in 待复制文件)
+        {
+            File.Copy(item, item.Replace(BIN目录, 解包目录), true);
+        }
+        Console.WriteLine("合并完毕！");
+    }
+
+    public static void 批量打包为EHP()
+    {
+        foreach (string EHP原路径 in 获取EHP目录(解包目录))
+        {
+            string 相对路径 = 获取相对路径(EHP原路径, 解包目录);
+            string 输出路径 = Path.Combine(EHP目录, Path.GetDirectoryName(相对路径));
+            string 文件名 = Path.GetFileName(相对路径);
+            string 输出EHP路径 = Path.Combine(输出路径, 文件名);
+            if (!Directory.Exists(输出路径)) Directory.CreateDirectory(输出路径);
+            // 第一个参数是源文件位置 第二个参数是输出位置（在此程序的OUTPUT文件夹）
+            string 参数 = $"-p \"{EHP原路径}\" \"{输出EHP路径}\"";
+            //Console.WriteLine($"{ehppack目录} {参数}");
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = ehppack目录,
+                Arguments = 参数,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            Process process = new Process { StartInfo = startInfo };
+            process.Start();
+        }
+    }
+
+    public static IEnumerable<string> 获取EHP目录(string 根目录)
+    {
+        return Directory.EnumerateDirectories(根目录, "*.ehp", SearchOption.AllDirectories);
+    }
+
+    public static IEnumerable<string> 获取JSON文件()
+    {
+        return Directory.EnumerateFiles(JSON目录, "*.json", SearchOption.AllDirectories);
     }
 
 

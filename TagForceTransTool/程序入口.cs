@@ -21,7 +21,10 @@ class 程序入口
                     提取文本();
                     break;
                 case '2':
-                    导入文本();
+                    JSON转EHP();
+                    break;
+                case '8':
+                    测试.JSON转换为Lj台词();
                     break;
                 case '9':
                     导入已有文本();
@@ -47,19 +50,22 @@ class 程序入口
         Console.WriteLine("获取完毕！\n开始转换Lj文件为JSON");
         foreach (var Lj文件 in Lj文件集合)
         {
-            工具类.Lj台词转换为JSON(Lj文件);
+            工具类.Lj台词转换为TXT(Lj文件);
         }
         Console.WriteLine("JSON导出完毕！请检查此程序目录下的JSON文件夹");
     }
 
-    static void 导入文本()
+    static void JSON转EHP()
     {
-        var TXT文件集合 = 工具类.获取TXT文件();
-        foreach (var TXT文件 in TXT文件集合)
+        var JSON文件集合 = 工具类.获取JSON文件();
+        foreach (var JSON文件 in JSON文件集合)
         {
-            工具类.TXT转换为Lj台词(TXT文件);
+            工具类.JSON转换为Lj台词(JSON文件);
         }
-        Console.WriteLine("Lj台词导出完毕！请检查此程序目录下的Tranz文件夹");
+        Console.WriteLine("Lj台词导出到Tranz文件夹，接下来将Tranz复制到Extraction，没有则会重新生成");
+        工具类.合并BIN();
+        工具类.批量打包为EHP();
+        Console.WriteLine("EHP打包完毕！请检查此程序目录下的EHP文件夹");
     }
 
     static void 导入已有文本()
@@ -75,7 +81,7 @@ class 程序入口
         Console.WriteLine("请拖入译文TXT");
         string 现TXT = Console.ReadLine().Trim('"');
 
-        string 现文本 = File.ReadAllText(现TXT);
+        string 现文本 = File.ReadAllText(现TXT, Encoding.Unicode);
         现文本 = 现文本.Replace("\r\n", "\n").Replace("\n-----\n", "\n");
 
         List<string> 现列表 = 现文本.Split(new string[] { "\n*****\n" }, StringSplitOptions.None).ToList();
@@ -84,6 +90,7 @@ class 程序入口
         {
             Console.WriteLine($"原{原列表.Count}现{现列表.Count}");
             Console.ReadKey();
+            return;
         }
         List<JObject> jobj = new();
         string 译文 = "";
@@ -109,7 +116,7 @@ class 程序入口
             });
         }
         string jsonContent = JsonConvert.SerializeObject(jobj, Formatting.Indented);
-        File.WriteAllText(原TXT + ".json", jsonContent, Encoding.UTF8);
+        File.WriteAllText(Path.ChangeExtension(原TXT, "json"), jsonContent, Encoding.UTF8);
         Console.WriteLine("完毕！");
         Console.ReadLine();
     }
