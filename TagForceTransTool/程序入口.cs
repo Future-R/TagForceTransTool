@@ -50,7 +50,7 @@ class 程序入口
         Console.WriteLine("获取完毕！\n开始转换Lj文件为JSON");
         foreach (var Lj文件 in Lj文件集合)
         {
-            工具类.Lj台词转换为TXT(Lj文件);
+            工具类.Lj台词转换为JSON(Lj文件);
         }
         Console.WriteLine("JSON导出完毕！请检查此程序目录下的JSON文件夹");
     }

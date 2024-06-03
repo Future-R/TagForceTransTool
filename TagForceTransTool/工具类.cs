@@ -223,7 +223,7 @@ public class 工具类
         string 短文件名 = Path.GetFileNameWithoutExtension(当前文件路径);
         bool 是bl = 短文件名.Contains("bl");
         bool 是gz = 短文件名.EndsWith(".gz");
-        bool 是LJ = 短文件名.Contains("LJ");
+        bool 是LJ = 短文件名.Contains("Lj");
 
         string 相对路径 = 获取相对路径(当前文件路径, JSON目录);
         string 输出路径 = Path.Combine(BIN目录, 相对路径);
@@ -247,6 +247,7 @@ public class 工具类
             number = 1;
         }
         List<byte> 文本偏移 = new() { 0x00, 0x00, 0x00, 0x00 };
+        int 累计字节数 = 0;
 
         // 逐条写入，每条写完都加\0
         foreach (var jobj in JSON数组.ToObject<List<JObject>>())
@@ -264,7 +265,8 @@ public class 工具类
             if (是bl)
             {
                 number++;
-                文本偏移.AddRange(BitConverter.GetBytes(待写入字节.Length));
+                累计字节数 += 待写入字节.Length;
+                文本偏移.AddRange(BitConverter.GetBytes(累计字节数));
             }
         }
 
