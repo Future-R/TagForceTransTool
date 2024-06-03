@@ -106,5 +106,29 @@ class 测试
             输出文件.Write(已写入字节.ToArray());
         }
     }
+
+    public static void 读取二进制()
+    {
+        Console.WriteLine("请拖入二进制文件路径");
+        string filePath = Console.ReadLine().Trim('"');
+
+        // 使用FileStream打开文件
+        using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+        {
+            // 创建一个足够大的buffer来读取文件
+            byte[] buffer = new byte[fs.Length];
+
+            // 读取文件到buffer中
+            fs.Read(buffer, 0, buffer.Length);
+
+            // 遍历buffer中的每一个字节
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                // 打印每一个字节的数值
+                Console.WriteLine("Byte at position {0} is: {1}", i, buffer[i]);
+            }
+        }
+    }
+
 }
 

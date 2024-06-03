@@ -243,7 +243,7 @@ public class 工具类
         int number = 0;
         if (!是LJ)
         {
-            已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
+            //已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
             number = 1;
         }
         List<byte> 文本偏移 = new() { 0x00, 0x00, 0x00, 0x00 };

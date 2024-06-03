@@ -24,7 +24,7 @@ class 程序入口
                     JSON转EHP();
                     break;
                 case '8':
-                    测试.JSON转换为Lj台词();
+                    测试.读取二进制();
                     break;
                 case '9':
                     导入已有文本();
