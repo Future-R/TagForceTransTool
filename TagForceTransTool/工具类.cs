@@ -12,6 +12,7 @@ public class 工具类
     static string ehppack目录 = string.Empty;
     static string 解包目录 = string.Empty;
     static string JSON目录 = string.Empty;
+    static string TXT目录 = string.Empty;
     static string BIN目录 = string.Empty;
     static string EHP目录 = string.Empty;
 
@@ -25,13 +26,19 @@ public class 工具类
         解包目录 = Path.Combine(根目录, "Extraction");
         if (Directory.Exists(解包目录))
         {
-            //Directory.Delete(解包目录, true);
+            Directory.Delete(解包目录, true);
         }
 
         JSON目录 = Path.Combine(根目录, "JSON");
         if (Directory.Exists(JSON目录))
         {
-            //Directory.Delete(JSON目录, true);
+            Directory.Delete(JSON目录, true);
+        }
+
+        TXT目录 = Path.Combine(根目录, "TXT");
+        if (Directory.Exists(TXT目录))
+        {
+            Directory.Delete(TXT目录, true);
         }
 
         BIN目录 = Path.Combine(Path.Combine(根目录, "Tranz"));
@@ -112,7 +119,7 @@ public class 工具类
         }
         string 相对路径 = 获取相对路径(当前文件路径, 解包目录);
         // 保留原扩展名，直接在后面加txt，方便将来转回bin和gz
-        string 输出路径 = Path.Combine(JSON目录, 相对路径) + ".txt";
+        string 输出路径 = Path.Combine(TXT目录, 相对路径) + ".txt";
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
         bool 有日语字符 = false;
@@ -243,11 +250,10 @@ public class 工具类
         int number = 0;
         if (!是LJ)
         {
-            //已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
+            已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
             number = 1;
         }
-        List<byte> 文本偏移 = new() { 0x00, 0x00, 0x00, 0x00 };
-        int 累计字节数 = 0;
+        List<byte> 文本偏移 = new();
 
         // 逐条写入，每条写完都加\0
         foreach (var jobj in JSON数组.ToObject<List<JObject>>())
@@ -265,8 +271,7 @@ public class 工具类
             if (是bl)
             {
                 number++;
-                累计字节数 += 待写入字节.Length;
-                文本偏移.AddRange(BitConverter.GetBytes(累计字节数));
+                文本偏移.AddRange(BitConverter.GetBytes(已写入字节.Count));
             }
         }
 
@@ -305,8 +310,9 @@ public class 工具类
         else
         {
             输出文件.Write(BitConverter.GetBytes(number), 0, 4);
-            输出文件.Write(new byte[] { 0x0C, 0x00, 0x00, 0x00 }, 0, 4);
+            输出文件.Write(new byte[] { 0x0c, 0x00, 0x00, 0x00 }, 0, 4);
             输出文件.Write(BitConverter.GetBytes(number * 4 + 12), 0, 4);
+            输出文件.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 }, 0, 4);
             输出文件.Write(文本偏移.ToArray(), 0, 文本偏移.Count);
             输出文件.Write(已写入字节.ToArray(), 0, 已写入字节.Count);
         }

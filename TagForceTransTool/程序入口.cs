@@ -51,6 +51,7 @@ class 程序入口
         foreach (var Lj文件 in Lj文件集合)
         {
             工具类.Lj台词转换为JSON(Lj文件);
+            工具类.Lj台词转换为TXT(Lj文件);
         }
         Console.WriteLine("JSON导出完毕！请检查此程序目录下的JSON文件夹");
     }
@@ -64,6 +65,8 @@ class 程序入口
         }
         Console.WriteLine("Lj台词导出到Tranz文件夹，接下来将Tranz复制到Extraction，没有则会重新生成");
         工具类.合并BIN();
+        Console.WriteLine("按任意键继续");
+        Console.ReadKey();
         工具类.批量打包为EHP();
         Console.WriteLine("EHP打包完毕！请检查此程序目录下的EHP文件夹");
     }
