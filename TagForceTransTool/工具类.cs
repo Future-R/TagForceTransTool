@@ -323,7 +323,7 @@ public class 工具类
         // 如果解包目录不存在，重新生成解包目录
         if (!Directory.Exists(解包目录))
         {
-            Console.WriteLine("请拖入需要解包的目录并回车\n解包结果会生成在此程序目录下的Extraction文件夹\n不会对源文件造成损害，大可安心");
+            Console.WriteLine("请拖入原游戏的USRDIR目录");
             string path = Console.ReadLine().Trim('"');  // 拖入文件的路径
             Console.WriteLine("开始解包……");
             解包ehp(path);
@@ -337,7 +337,6 @@ public class 工具类
         {
             File.Copy(item, item.Replace(BIN目录, 解包目录), true);
         }
-        Console.WriteLine("合并完毕！");
     }
 
     public static void 批量打包为EHP()
@@ -366,13 +365,57 @@ public class 工具类
         }
     }
 
-    public static IEnumerable<string> 获取EHP目录(string 根目录)
+    public static bool 二次检查EHP()
     {
-        return Directory.EnumerateDirectories(根目录, "*.ehp", SearchOption.AllDirectories);
+        bool 还有空文件 = false;
+        foreach (string EHP原路径 in 获取EHP目录(解包目录))
+        {
+            string 相对路径 = 获取相对路径(EHP原路径, 解包目录);
+            string 输出路径 = Path.Combine(EHP目录, Path.GetDirectoryName(相对路径));
+            string 文件名 = Path.GetFileName(相对路径);
+            string 输出EHP路径 = Path.Combine(输出路径, 文件名);
+
+            FileInfo fileInfo = new FileInfo(输出EHP路径);
+            if (fileInfo.Exists && fileInfo.Length == 0)
+            {
+                还有空文件 = true;
+                string 参数 = $"-p \"{EHP原路径}\" \"{输出EHP路径}\"";
+                Console.WriteLine($"ehppack -p \"{EHP原路径}\" \"{输出EHP路径}\"");
+                //Console.WriteLine($"{ehppack目录} {参数}");
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    FileName = ehppack目录,
+                    Arguments = 参数,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                Process process = new Process { StartInfo = startInfo };
+                process.Start();
+            }
+        }
+        return 还有空文件;
+    }
+
+    public static List<string> 获取EHP目录(string 根目录)
+    {
+        List<string> 返回值 = new List<string>();
+        // 只需要pack被tranz的ehp，而不是所有
+        foreach (var item in Directory.EnumerateDirectories(BIN目录, "*.ehp", SearchOption.AllDirectories))
+        {
+            返回值.Add(item.Replace(BIN目录, 解包目录));
+        }
+        return 返回值;
     }
 
     public static IEnumerable<string> 获取JSON文件()
     {
+        if (!Directory.Exists(JSON目录))
+        {
+            Console.WriteLine("请拖入译文目录(就是那个UTF8文件夹)");
+            JSON目录 = Console.ReadLine().Trim('"');
+        } 
         return Directory.EnumerateFiles(JSON目录, "*.json", SearchOption.AllDirectories);
     }
 

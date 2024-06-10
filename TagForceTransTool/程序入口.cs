@@ -63,11 +63,15 @@ class 程序入口
         {
             工具类.JSON转换为Lj台词(JSON文件);
         }
-        Console.WriteLine("Lj台词导出到Tranz文件夹，接下来将Tranz复制到Extraction，没有则会重新生成");
         工具类.合并BIN();
-        Console.WriteLine("按任意键继续");
-        Console.ReadKey();
+        Console.WriteLine("合并完毕！正在打包，请稍候……");
         工具类.批量打包为EHP();
+        bool 还有空文件 = true;
+        while (还有空文件)
+        {
+            Thread.Sleep(2000);
+            还有空文件 = 工具类.二次检查EHP();
+        }
         Console.WriteLine("EHP打包完毕！请检查此程序目录下的EHP文件夹");
     }
 
