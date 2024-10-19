@@ -9,6 +9,28 @@ using System.Threading.Tasks;
 
 class 测试
 {
+    public static void 搜索文本()
+    {
+        Console.WriteLine("请拖入需要解包的目录并回车\n解包结果会生成在此程序目录下的Extraction文件夹\n不会对源文件造成损害，大可安心");
+        string path = Console.ReadLine().Trim('"');  // 拖入文件的路径
+        Console.WriteLine("开始解包……");
+        工具类.解包ehp(path);
+        Console.WriteLine("解包完毕，开始扫描所有bin/gz");
+
+        var 文件集合 = 工具类.获取bin与gz文件();
+        Console.WriteLine("扫描完毕，请输入待搜索的关键字：");
+        var 关键字 = Console.ReadLine();
+
+        foreach (var item in 文件集合)
+        {
+            var 搜索结果 = 工具类.返回搜索结果文件名(item, 关键字);
+            if (!string.IsNullOrEmpty(搜索结果))
+            {
+                Console.WriteLine(搜索结果);
+            }
+        }
+        Console.WriteLine("搜索完毕！");
+    }
     public static void JSON转换为Lj台词()
     {
 

@@ -23,6 +23,9 @@ class 程序入口
                 case '2':
                     JSON转EHP();
                     break;
+                case '7':
+                    测试.搜索文本();
+                    break;
                 case '8':
                     测试.读取二进制();
                     break;
@@ -51,7 +54,7 @@ class 程序入口
         foreach (var Lj文件 in Lj文件集合)
         {
             工具类.Lj台词转换为JSON(Lj文件);
-            工具类.Lj台词转换为TXT(Lj文件);
+            //工具类.Lj台词转换为TXT(Lj文件);
         }
         Console.WriteLine("JSON导出完毕！请检查此程序目录下的JSON文件夹");
     }

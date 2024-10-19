@@ -99,6 +99,16 @@ public class 工具类
             });
     }
 
+    public static IEnumerable<string> 获取bin与gz文件()
+    {
+        return Directory.EnumerateFiles(解包目录, "*.*", SearchOption.AllDirectories)
+            .Where(file =>
+            {
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file);
+                return (file.EndsWith(".bin") || file.EndsWith(".gz"));
+            });
+    }
+
 
     public static void Lj台词转换为TXT(string 当前文件路径)
     {
@@ -155,6 +165,51 @@ public class 工具类
                 输出文本.Write(sb.ToString());
             }
         }
+    }
+
+    public static string? 返回搜索结果文件名(string 当前文件路径, string 关键字)
+    {
+        string 扩展名 = Path.GetExtension(当前文件路径);
+        byte[] 源文本;
+        if (扩展名 == ".gz")
+        {
+            using (var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress))
+            {
+                var ms = new MemoryStream();
+                file.CopyTo(ms);
+                源文本 = ms.ToArray();
+            }
+        }
+        else
+        {
+            源文本 = File.ReadAllBytes(当前文件路径);
+        }
+
+        StringBuilder sb = new();
+        int index = 0;
+        int bias = 当前文件路径.Contains("bl") ? BitConverter.ToInt32(源文本, 8) : 0;
+        index += bias;
+        while (index < 源文本.Length)
+        {
+            int count = index + 2 <= 源文本.Length ? 2 : 源文本.Length - index;
+            string 双字节 = Encoding.Unicode.GetString(源文本, index, count);
+
+            // 终止符，表示该条目结束
+            if (双字节 == "\0")
+            {
+                if (sb.ToString().Contains(关键字))
+                {
+                    return 当前文件路径;
+                }
+                sb = new();
+            }
+            else
+            {
+                sb.Append(双字节);
+            }
+            index += 2;
+        }
+        return null;
     }
 
     public static void Lj台词转换为JSON(string 当前文件路径)
