@@ -1,10 +1,11 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
+using System.Linq;
 using System.Text;
-
+using System.Threading;
 class 程序入口
 {
     static void Main()
@@ -102,7 +103,7 @@ class 程序入口
             Console.ReadKey();
             return;
         }
-        List<JObject> jobj = new();
+        List<JObject> jobj = new List<JObject>();
         string 译文 = "";
         int stage = 0;
         for (int i = 0; i < 原列表.Count; i++)
@@ -122,7 +123,7 @@ class 程序入口
                 ["key"] = i.ToString().PadLeft(6, '0'),
                 ["original"] = 原列表[i],
                 ["translation"] = 译文,
-                ["stage"] = 0
+                ["stage"] = stage
             });
         }
         string jsonContent = JsonConvert.SerializeObject(jobj, Formatting.Indented);

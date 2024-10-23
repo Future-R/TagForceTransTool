@@ -1,10 +1,10 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 
 class 测试
@@ -55,15 +55,15 @@ class 测试
         JArray JSON数组 = JArray.Parse(JSON字典文本);
 
         // 如果是gz，使用GZipStream
-        using var 输出文件 = 是gz ? (Stream)new GZipStream(File.Create(输出路径), CompressionMode.Compress) : File.Create(输出路径);
-        List<byte> 已写入字节 = new();
+        var 输出文件 = 是gz ? (Stream)new GZipStream(File.Create(输出路径), CompressionMode.Compress) : File.Create(输出路径);
+        List<byte> 已写入字节 = new List<byte>();
         int number = 0;
         if (!是LJ)
         {
             已写入字节.AddRange(new byte[] { 0xFF, 0xFE });
             number = 1;
         }
-        List<byte> 文本偏移 = new() { 0x00, 0x00, 0x00, 0x00 };
+        List<byte> 文本偏移 = new List<byte>() { 0x00, 0x00, 0x00, 0x00 };
         int 累计字节数 = 0;
 
         // 逐条写入，每条写完都加\0
@@ -89,7 +89,7 @@ class 测试
 
         if (是LJ)
         {
-            List<byte> 文本索引 = new() { 0x00, 0x00, 0x00, 0x00 };
+            List<byte> 文本索引 = new List<byte>() { 0x00, 0x00, 0x00, 0x00 };
             int index = 0;
             int eof = 已写入字节.Count;
             byte[] buffer = new byte[2];
@@ -116,16 +116,16 @@ class 测试
             输出文件.Write(已写入字节.ToArray(), 0, 已写入字节.Count);
             // 写入索引IJ文件
             string 索引输出路径 = 输出路径.Replace("Lj", "Ij");
-            using var 索引输出文件 = 是gz ? (Stream)new GZipStream(File.Create(索引输出路径), CompressionMode.Compress) : File.Create(索引输出路径);
+            var 索引输出文件 = 是gz ? (Stream)new GZipStream(File.Create(索引输出路径), CompressionMode.Compress) : File.Create(索引输出路径);
             索引输出文件.Write(文本索引.ToArray(), 0, 文本索引.Count);
         }
         else
         {
-            输出文件.Write(BitConverter.GetBytes(number));
-            输出文件.Write(new byte[] { 0x0C, 0x00, 0x00, 0x00 });
-            输出文件.Write(BitConverter.GetBytes(number * 4 + 12));
-            输出文件.Write(文本偏移.ToArray());
-            输出文件.Write(已写入字节.ToArray());
+            输出文件.Write(BitConverter.GetBytes(number),0, BitConverter.GetBytes(number).Length);
+            输出文件.Write(new byte[] { 0x0C, 0x00, 0x00, 0x00 }, 0, 4);
+            输出文件.Write(BitConverter.GetBytes(number * 4 + 12), 0, BitConverter.GetBytes(number * 4 + 12).Length);
+            输出文件.Write(文本偏移.ToArray(), 0, 文本偏移.Count);
+            输出文件.Write(已写入字节.ToArray(), 0, 已写入字节.Count());
         }
     }
 
