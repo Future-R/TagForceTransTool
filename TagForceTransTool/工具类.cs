@@ -56,6 +56,89 @@ public class 工具类
         }
     }
 
+    public static void LF转CRLF(string 输入目录)
+    {
+        string targetDirectory = 输入目录;
+
+        try
+        {
+            // 递归获取目标目录及其子目录中所有的 .json 文件
+            var jsonFiles = Directory.EnumerateFiles(targetDirectory, "*.json", SearchOption.AllDirectories);
+
+            int processedCount = 0;
+            int convertedCount = 0;
+
+            foreach (string filePath in jsonFiles)
+            {
+                Console.WriteLine($"正在处理文件: {filePath}");
+                processedCount++;
+
+                // 读取文件内容
+                string originalContent;
+                try
+                {
+                    // 使用 File.ReadAllText 读取文件，它会根据文件编码自动处理换行符
+                    // 但为了安全，我们最好手动处理，确保准确性
+                    originalContent = File.ReadAllText(filePath, System.Text.Encoding.UTF8);
+                }
+                catch (IOException ex)
+                {
+                    Console.WriteLine($"  - 错误：无法读取文件 '{filePath}'。{ex.Message}");
+                    continue;
+                }
+                catch (OutOfMemoryException ex)
+                {
+                    Console.WriteLine($"  - 错误：文件 '{filePath}' 过大，内存不足。{ex.Message}");
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  - 错误：读取文件 '{filePath}' 时发生未知错误。{ex.Message}");
+                    continue;
+                }
+
+                // 将所有现有换行符标准化为 LF，然后替换为 CRLF
+                // 这样可以避免将 CRLF 变为 CRCRLF 的情况
+                string tempContent = originalContent.Replace("\r\n", "\n"); // 先将所有 CRLF 转换为 LF
+                string newContent = tempContent.Replace("\n", "\r\n");     // 再将所有 LF 转换为 CRLF
+
+                // 只有当内容发生变化时才写回文件
+                if (newContent != originalContent)
+                {
+                    try
+                    {
+                        // 使用 File.WriteAllText 写入文件，指定 UTF8 编码
+                        File.WriteAllText(filePath, newContent, System.Text.Encoding.UTF8);
+                        convertedCount++;
+                    }
+                    catch (IOException ex)
+                    {
+                        Console.WriteLine($"  - 错误：无法写入文件 '{filePath}'。{ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"  - 错误：写入文件 '{filePath}' 时发生未知错误。{ex.Message}");
+                    }
+                }
+            }
+
+            Console.WriteLine("\n--------------------------");
+            Console.WriteLine($"所有JSON文件处理完成。共处理 {processedCount} 个文件，其中 {convertedCount} 个文件的换行符被转换。");
+        }
+        catch (DirectoryNotFoundException)
+        {
+            Console.WriteLine($"错误：指定的目录 '{targetDirectory}' 不存在。");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Console.WriteLine($"错误：无权访问目录 '{targetDirectory}'。请检查权限或以管理员身份运行。");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"发生未知错误: {ex.Message}");
+        }
+    }
+
     public static void 解包ehp(string 输入目录)
     {
         string searchPattern = "*.ehp";
@@ -414,7 +497,7 @@ public class 工具类
                 Arguments = 参数,
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
             };
 
             Process process = new Process { StartInfo = startInfo };

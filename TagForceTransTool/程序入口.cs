@@ -15,7 +15,8 @@ class 程序入口
         while (true)
         {
             Console.Clear();
-            Console.WriteLine("请按下序号：\n[ 1 ] - 提取文本 - [ 1 ]\n[ 2 ] - 导入文本 - [ 2 ]");
+            Console.WriteLine("运行前请先确认路径中是否有空格或中文……");
+            Console.WriteLine("请按下序号：\n[ 1 ] - 提取文本 - [ 1 ]\n[ 2 ] - 导入文本 - [ 2 ]\n[ 6 ] - 转换行符 - [ 6 ]");
             switch (Console.ReadKey(true).KeyChar)
             {
                 case '1':
@@ -23,6 +24,11 @@ class 程序入口
                     break;
                 case '2':
                     JSON转EHP();
+                    break;
+                case '6':
+                    Console.WriteLine("请拖入要转换的目录");
+                    工具类.LF转CRLF(Console.ReadLine().Trim('"'));
+                    Console.WriteLine("换行符转换完毕");
                     break;
                 case '7':
                     测试.搜索文本();
