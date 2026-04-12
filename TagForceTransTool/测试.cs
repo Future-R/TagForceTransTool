@@ -12,14 +12,19 @@ class 测试
     public static void 搜索文本()
     {
         Console.WriteLine("请拖入需要解包的目录并回车\n解包结果会生成在此程序目录下的Extraction文件夹\n不会对源文件造成损害，大可安心");
-        string path = Console.ReadLine().Trim('"');  // 拖入文件的路径
+        string path = (Console.ReadLine() ?? string.Empty).Trim('"');
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            Console.WriteLine("未提供有效目录");
+            return;
+        }
         Console.WriteLine("开始解包……");
         工具类.解包ehp(path);
         Console.WriteLine("解包完毕，开始扫描所有bin/gz");
 
         var 文件集合 = 工具类.获取bin与gz文件();
         Console.WriteLine("扫描完毕，请输入待搜索的关键字：");
-        var 关键字 = Console.ReadLine();
+        string 关键字 = Console.ReadLine() ?? string.Empty;
 
         foreach (var item in 文件集合)
         {
@@ -35,21 +40,24 @@ class 测试
     {
 
         Console.WriteLine("请拖入当前文件路径");
-        string 当前文件路径 = Console.ReadLine().Trim('"');
+        string 当前文件路径 = (Console.ReadLine() ?? string.Empty).Trim('"');
+        if (string.IsNullOrWhiteSpace(当前文件路径))
+        {
+            Console.WriteLine("未提供文件路径");
+            return;
+        }
 
 
         string 短文件名 = Path.GetFileNameWithoutExtension(当前文件路径);
         bool 是bl = 短文件名.Contains("bl");
         bool 是gz = 短文件名.EndsWith(".gz");
-        bool 是LJ = 短文件名.Contains("LJ");
+        bool 是LJ = 短文件名.Contains("Lj");
 
         string 输出路径 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Path.GetFileName(当前文件路径));
         // 去掉.json后缀，恢复原后缀
         输出路径 = 输出路径.Substring(0, 输出路径.Length - 5);
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
-        // 相当于一个索引ID，标记每段文字开始的位置
-        List<int> 指针组 = new List<int>();
         // 接下来先读取JSON，拿到条目List
         string JSON字典文本 = File.ReadAllText(当前文件路径);
         JArray JSON数组 = JArray.Parse(JSON字典文本);
@@ -67,13 +75,14 @@ class 测试
         int 累计字节数 = 0;
 
         // 逐条写入，每条写完都加\0
-        foreach (var jobj in JSON数组.ToObject<List<JObject>>())
+        foreach (JObject jobj in JSON数组.Children<JObject>())
         {
             // -1已隐藏，0未翻译，这俩将使用原文original，否则使用译文translation
             // PSP里换行是\x0A\x00，对应\n+空字符，因为unicode固定占用两个字节，所以\n后面会自动补
-            string 当前条目 = (int)jobj["stage"].ToObject(typeof(int)) > 0
-                ? jobj["translation"].ToString()
-                : jobj["original"].ToString();
+            int stage = jobj.Value<int?>("stage") ?? 0;
+            string original = jobj.Value<string>("original") ?? string.Empty;
+            string translation = jobj.Value<string>("translation") ?? string.Empty;
+            string 当前条目 = stage > 0 ? translation : original;
             byte[] 待写入字节 = Encoding.Convert(Encoding.UTF8, Encoding.Unicode, Encoding.UTF8.GetBytes(当前条目.Replace("\\n", "\n")));
             已写入字节.AddRange(待写入字节);
             // 条目结束，写入\0
@@ -132,7 +141,12 @@ class 测试
     public static void 读取二进制()
     {
         Console.WriteLine("请拖入二进制文件路径");
-        string filePath = Console.ReadLine().Trim('"');
+        string filePath = (Console.ReadLine() ?? string.Empty).Trim('"');
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            Console.WriteLine("未提供文件路径");
+            return;
+        }
 
         // 使用FileStream打开文件
         using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))

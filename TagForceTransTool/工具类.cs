@@ -18,6 +18,39 @@ public class 工具类
     static string BIN目录 = string.Empty;
     static string EHP目录 = string.Empty;
 
+    static void 确认ehppack可用()
+    {
+        if (string.IsNullOrWhiteSpace(ehppack目录))
+        {
+            ehppack目录 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ehppack.exe");
+        }
+
+        if (!File.Exists(ehppack目录))
+        {
+            throw new FileNotFoundException("未找到 ehppack.exe，请将它放到程序运行目录后再试。", ehppack目录);
+        }
+    }
+
+    static int 执行ehppack(string 参数)
+    {
+        确认ehppack可用();
+
+        using Process process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = ehppack目录,
+                Arguments = 参数,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+
+        process.Start();
+        process.WaitForExit();
+        return process.ExitCode;
+    }
+
     public static void 初始化()
     {
         根目录 = AppDomain.CurrentDomain.BaseDirectory;
@@ -141,27 +174,31 @@ public class 工具类
 
     public static void 解包ehp(string 输入目录)
     {
-        string searchPattern = "*.ehp";
+        if (!Directory.Exists(输入目录))
+        {
+            throw new DirectoryNotFoundException($"指定的目录不存在：{输入目录}");
+        }
 
-        foreach (string 源文件路径 in Directory.EnumerateFiles(输入目录, searchPattern, SearchOption.AllDirectories))
+        string searchPattern = "*.ehp";
+        List<string> 源文件列表 = Directory.EnumerateFiles(输入目录, searchPattern, SearchOption.AllDirectories).ToList();
+        if (源文件列表.Count == 0)
+        {
+            throw new FileNotFoundException($"在目录“{输入目录}”下未找到任何 .ehp 文件。");
+        }
+
+        foreach (string 源文件路径 in 源文件列表)
         {
             string 相对路径 = 获取相对路径(源文件路径, 输入目录);
             string 输出路径 = Path.Combine(解包目录, 相对路径);
             if (!Directory.Exists(输出路径)) Directory.CreateDirectory(输出路径);
             // 第一个参数是源文件位置 第二个参数是输出位置（在此程序的OUTPUT文件夹）
             string 参数 = $"\"{源文件路径}\" \"{输出路径}\"";
-            //Console.WriteLine($"{ehppack目录} {参数}");
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = ehppack目录,
-                Arguments = 参数,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
 
-            Process process = new Process { StartInfo = startInfo };
-            process.Start();
+            int exitCode = 执行ehppack(参数);
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException($"解包失败：{源文件路径}，ehppack 退出码：{exitCode}");
+            }
         }
     }
 
@@ -378,8 +415,6 @@ public class 工具类
         输出路径 = 输出路径.Substring(0, 输出路径.Length - 5);
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
-        // 相当于一个索引ID，标记每段文字开始的位置
-        List<int> 指针组 = new List<int>();
         // 接下来先读取JSON，拿到条目List
         string JSON字典文本 = File.ReadAllText(当前文件路径);
         JArray JSON数组 = JArray.Parse(JSON字典文本);
@@ -396,13 +431,14 @@ public class 工具类
         List<byte> 文本偏移 = new();
 
         // 逐条写入，每条写完都加\0
-        foreach (var jobj in JSON数组.ToObject<List<JObject>>())
+        foreach (JObject jobj in JSON数组.Children<JObject>())
         {
             // -1已隐藏，0未翻译，这俩将使用原文original，否则使用译文translation
             // PSP里换行是\x0A\x00，对应\n+空字符，因为unicode固定占用两个字节，所以\n后面会自动补
-            string 当前条目 = (int)jobj["stage"].ToObject(typeof(int)) > 0
-                ? jobj["translation"].ToString()
-                : jobj["original"].ToString();
+            int stage = jobj.Value<int?>("stage") ?? 0;
+            string original = jobj.Value<string>("original") ?? string.Empty;
+            string translation = jobj.Value<string>("translation") ?? string.Empty;
+            string 当前条目 = stage > 0 ? translation : original;
             byte[] 待写入字节 = Encoding.Convert(Encoding.UTF8, Encoding.Unicode, Encoding.UTF8.GetBytes(当前条目.Replace("\\n", "\n")));
             已写入字节.AddRange(待写入字节);
             // 条目结束，写入\0
@@ -464,11 +500,14 @@ public class 工具类
         if (!Directory.Exists(解包目录))
         {
             Console.WriteLine("请拖入原游戏的USRDIR目录");
-            string path = Console.ReadLine().Trim('"');  // 拖入文件的路径
+            string path = (Console.ReadLine() ?? string.Empty).Trim('"');
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new DirectoryNotFoundException("未提供原游戏目录");
+            }
             Console.WriteLine("开始解包……");
             解包ehp(path);
-            Console.WriteLine("解包完毕，请按任意键继续\n（如果解包时间少于1秒，请过1秒再按，不然电脑反应不过来）");
-            Console.ReadKey();
+            Console.WriteLine("解包完毕！");
         }
         // 有解包目录的情况下，将BIN目录的文件覆盖到解包目录
         var 待复制文件 = Directory.EnumerateFiles(BIN目录, "*.*", SearchOption.AllDirectories);
@@ -481,7 +520,14 @@ public class 工具类
 
     public static void 批量打包为EHP()
     {
-        foreach (string EHP原路径 in 获取EHP目录(解包目录))
+        List<string> EHP原路径集合 = 获取EHP目录(解包目录);
+        if (EHP原路径集合.Count == 0)
+        {
+            Console.WriteLine("没有找到需要重新打包的EHP目录");
+            return;
+        }
+
+        foreach (string EHP原路径 in EHP原路径集合)
         {
             string 相对路径 = 获取相对路径(EHP原路径, 解包目录);
             string 输出路径 = Path.Combine(EHP目录, Path.GetDirectoryName(相对路径));
@@ -490,18 +536,12 @@ public class 工具类
             if (!Directory.Exists(输出路径)) Directory.CreateDirectory(输出路径);
             // 第一个参数是源文件位置 第二个参数是输出位置（在此程序的OUTPUT文件夹）
             string 参数 = $"-p \"{EHP原路径}\" \"{输出EHP路径}\"";
-            //Console.WriteLine($"{ehppack目录} {参数}");
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = ehppack目录,
-                Arguments = 参数,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
 
-            Process process = new Process { StartInfo = startInfo };
-            process.Start();
+            int exitCode = 执行ehppack(参数);
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException($"打包失败：{EHP原路径}，ehppack 退出码：{exitCode}");
+            }
         }
     }
 
@@ -516,23 +556,17 @@ public class 工具类
             string 输出EHP路径 = Path.Combine(输出路径, 文件名);
 
             FileInfo fileInfo = new FileInfo(输出EHP路径);
-            if (fileInfo.Exists && fileInfo.Length == 0)
+            if (!fileInfo.Exists || fileInfo.Length == 0)
             {
                 还有空文件 = true;
                 string 参数 = $"-p \"{EHP原路径}\" \"{输出EHP路径}\"";
                 Console.WriteLine($"ehppack -p \"{EHP原路径}\" \"{输出EHP路径}\"");
-                //Console.WriteLine($"{ehppack目录} {参数}");
-                ProcessStartInfo startInfo = new ProcessStartInfo
-                {
-                    FileName = ehppack目录,
-                    Arguments = 参数,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
 
-                Process process = new Process { StartInfo = startInfo };
-                process.Start();
+                int exitCode = 执行ehppack(参数);
+                if (exitCode != 0)
+                {
+                    throw new InvalidOperationException($"二次打包失败：{EHP原路径}，ehppack 退出码：{exitCode}");
+                }
             }
         }
         return 还有空文件;
@@ -554,8 +588,14 @@ public class 工具类
         if (!Directory.Exists(JSON目录))
         {
             Console.WriteLine("请拖入译文目录(就是那个UTF8文件夹)");
-            JSON目录 = Console.ReadLine().Trim('"');
-        } 
+            JSON目录 = (Console.ReadLine() ?? string.Empty).Trim('"');
+        }
+
+        if (!Directory.Exists(JSON目录))
+        {
+            throw new DirectoryNotFoundException($"未找到译文目录：{JSON目录}");
+        }
+
         return Directory.EnumerateFiles(JSON目录, "*.json", SearchOption.AllDirectories);
     }
 
