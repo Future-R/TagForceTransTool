@@ -16,7 +16,7 @@ class 程序入口
         {
             Console.Clear();
             Console.WriteLine("运行前请先确认路径中是否有空格或中文……");
-            Console.WriteLine("请按下序号：\n[ 1 ] - 提取文本 - [ 1 ]\n[ 2 ] - 导入文本 - [ 2 ]\n[ 6 ] - 转换行符 - [ 6 ]");
+            Console.WriteLine("请按下序号：\n[ 1 ] - 提取文本 - [ 1 ]\n[ 2 ] - 导入文本 - [ 2 ]\n[ 5 ] - 导出STRTBL图像 - [ 5 ]\n[ 6 ] - 转换行符 - [ 6 ]");
             try
             {
                 switch (Console.ReadKey(true).KeyChar)
@@ -26,6 +26,9 @@ class 程序入口
                         break;
                     case '2':
                         JSON转EHP();
+                        break;
+                    case '5':
+                        导出STRTBL图像();
                         break;
                     case '6':
                         Console.WriteLine("请拖入要转换的目录");
@@ -105,6 +108,20 @@ class 程序入口
             还有空文件 = 工具类.二次检查EHP();
         }
         Console.WriteLine("EHP打包完毕！请检查此程序目录下的EHP文件夹");
+    }
+
+    static void 导出STRTBL图像()
+    {
+        Console.WriteLine("请拖入要导出的 STRTBL10 文件");
+        string path = (Console.ReadLine() ?? string.Empty).Trim('"');
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            Console.WriteLine("未提供文件路径");
+            return;
+        }
+
+        string 输出路径 = 工具类.导出STRTBL图像(path);
+        Console.WriteLine($"导出完毕：{输出路径}");
     }
 
     static void 导入已有文本()

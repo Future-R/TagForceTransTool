@@ -18,6 +18,338 @@ public class 工具类
     static string BIN目录 = string.Empty;
     static string EHP目录 = string.Empty;
 
+    static bool 是Lj文本文件(string 文件路径)
+    {
+        string 文件名 = Path.GetFileNameWithoutExtension(文件路径);
+        return 文件名.IndexOf("Lj", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    static bool 是偏移文本表(string 文件路径)
+    {
+        string 文件名 = Path.GetFileNameWithoutExtension(文件路径).ToLowerInvariant();
+        return 文件名.Contains("strtbl")
+            || 文件名.Contains("wordstbl")
+            || 文件名 == "bl"
+            || 文件名.StartsWith("bl_")
+            || 文件名.EndsWith("_bl")
+            || 文件名.Contains("_bl_");
+    }
+
+    static bool 是文本候选文件(string 文件路径)
+    {
+        string 文件名 = Path.GetFileNameWithoutExtension(文件路径);
+        string 小写文件名 = 文件名.ToLowerInvariant();
+        string 扩展名 = Path.GetExtension(文件路径).ToLowerInvariant();
+
+        if (扩展名 != ".bin" && 扩展名 != ".gz")
+        {
+            return false;
+        }
+
+        if (小写文件名.Contains("voice"))
+        {
+            return false;
+        }
+
+        if (小写文件名.EndsWith("bl_e")
+            || 小写文件名.EndsWith("bl_f")
+            || 小写文件名.EndsWith("bl_g")
+            || 小写文件名.EndsWith("bl_i")
+            || 小写文件名.EndsWith("bl_s"))
+        {
+            return false;
+        }
+
+        return 是Lj文本文件(文件路径)
+            || 小写文件名.Contains("strtbl")
+            || 小写文件名.Contains("wordstbl")
+            || 是偏移文本表(文件路径);
+    }
+
+    static byte[] 读取文本源字节(string 当前文件路径)
+    {
+        if (Path.GetExtension(当前文件路径).Equals(".gz", StringComparison.OrdinalIgnoreCase))
+        {
+            using var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress);
+            using var ms = new MemoryStream();
+            file.CopyTo(ms);
+            return ms.ToArray();
+        }
+
+        return File.ReadAllBytes(当前文件路径);
+    }
+
+    static int 获取文本起始偏移(string 当前文件路径, byte[] 源文本)
+    {
+        if (!是偏移文本表(当前文件路径) || 源文本.Length < 12)
+        {
+            return 0;
+        }
+
+        int 偏移 = BitConverter.ToInt32(源文本, 8);
+        return 偏移 >= 0 && 偏移 < 源文本.Length ? 偏移 : 0;
+    }
+
+    static bool 是假名(char 字符)
+    {
+        return (字符 >= '\u3040' && 字符 <= '\u309F')
+            || (字符 >= '\u30A0' && 字符 <= '\u30FF');
+    }
+
+    static bool 是中日韩文字(char 字符)
+    {
+        return 字符 >= '\u4E00' && 字符 <= '\u9FFF';
+    }
+
+    static bool 是文本样式字符(char 字符)
+    {
+        if (char.IsControl(字符))
+        {
+            return false;
+        }
+
+        return char.IsLetterOrDigit(字符)
+            || char.IsWhiteSpace(字符)
+            || char.IsPunctuation(字符)
+            || char.IsSymbol(字符)
+            || (字符 >= '\u3000' && 字符 <= '\u303F')
+            || (字符 >= '\uFF00' && 字符 <= '\uFFEF')
+            || 是假名(字符)
+            || 是中日韩文字(字符);
+    }
+
+    static bool 值得导出为文本(IReadOnlyCollection<string> 条目列表)
+    {
+        List<string> 非空条目 = 条目列表
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Take(200)
+            .ToList();
+
+        if (非空条目.Count == 0)
+        {
+            return false;
+        }
+
+        bool 含假名 = false;
+        bool 含中日韩 = false;
+        int 可见字符数 = 0;
+        int 文本样式字符数 = 0;
+
+        foreach (string 条目 in 非空条目)
+        {
+            foreach (char 字符 in 条目)
+            {
+                if (!char.IsControl(字符))
+                {
+                    可见字符数++;
+                }
+
+                if (是文本样式字符(字符))
+                {
+                    文本样式字符数++;
+                }
+
+                if (是假名(字符))
+                {
+                    含假名 = true;
+                }
+
+                if (是中日韩文字(字符))
+                {
+                    含中日韩 = true;
+                }
+            }
+        }
+
+        if (!(含假名 || 含中日韩) || 可见字符数 == 0)
+        {
+            return false;
+        }
+
+        return 文本样式字符数 * 100 >= 可见字符数 * 85;
+    }
+
+    static string 读取STRTBL数值串(byte[] 源文本, int 指针位置, int 长度)
+    {
+        if (长度 <= 0 || 指针位置 < 0 || 指针位置 >= 源文本.Length)
+        {
+            return string.Empty;
+        }
+
+        int UTF16起点 = 指针位置 % 2 == 0 ? 指针位置 : 指针位置 + 1;
+        if (UTF16起点 + 长度 * 2 <= 源文本.Length)
+        {
+            string utf16结果 = Encoding.Unicode.GetString(源文本, UTF16起点, 长度 * 2);
+            string utf16数字 = new string(utf16结果.Where(char.IsDigit).ToArray());
+            if (utf16数字.Length > 0)
+            {
+                return utf16数字;
+            }
+        }
+
+        int ASCII终点 = 指针位置;
+        while (ASCII终点 < 源文本.Length && 源文本[ASCII终点] != 0)
+        {
+            ASCII终点++;
+        }
+
+        if (ASCII终点 > 指针位置)
+        {
+            string ascii结果 = Encoding.ASCII.GetString(源文本, 指针位置, ASCII终点 - 指针位置);
+            string ascii数字 = new string(ascii结果.Where(char.IsDigit).ToArray());
+            if (ascii数字.Length > 0)
+            {
+                return ascii数字;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    static byte[] 生成24位BMP(byte[,] 灰度数据, int 缩放倍数)
+    {
+        int 原高 = 灰度数据.GetLength(0);
+        int 原宽 = 灰度数据.GetLength(1);
+        int 宽 = 原宽 * 缩放倍数;
+        int 高 = 原高 * 缩放倍数;
+        int 行步长 = (宽 * 3 + 3) & ~3;
+        int 像素区大小 = 行步长 * 高;
+        int 文件大小 = 14 + 40 + 像素区大小;
+
+        using var ms = new MemoryStream(文件大小);
+        using var bw = new BinaryWriter(ms);
+
+        bw.Write((byte)'B');
+        bw.Write((byte)'M');
+        bw.Write(文件大小);
+        bw.Write((short)0);
+        bw.Write((short)0);
+        bw.Write(54);
+
+        bw.Write(40);
+        bw.Write(宽);
+        bw.Write(高);
+        bw.Write((short)1);
+        bw.Write((short)24);
+        bw.Write(0);
+        bw.Write(像素区大小);
+        bw.Write(2835);
+        bw.Write(2835);
+        bw.Write(0);
+        bw.Write(0);
+
+        byte[] 填充 = new byte[行步长 - 宽 * 3];
+        for (int y = 高 - 1; y >= 0; y--)
+        {
+            int 源Y = y / 缩放倍数;
+            for (int x = 0; x < 宽; x++)
+            {
+                int 源X = x / 缩放倍数;
+                byte 灰度 = 灰度数据[源Y, 源X];
+                bw.Write(灰度);
+                bw.Write(灰度);
+                bw.Write(灰度);
+            }
+
+            if (填充.Length > 0)
+            {
+                bw.Write(填充);
+            }
+        }
+
+        bw.Flush();
+        return ms.ToArray();
+    }
+
+    public static string 导出STRTBL图像(string 输入文件)
+    {
+        byte[] 源文本 = File.ReadAllBytes(输入文件);
+        if (源文本.Length < 20 || Encoding.ASCII.GetString(源文本, 0, 8) != "STRTBL10")
+        {
+            throw new InvalidDataException("这不是受支持的 STRTBL10 文件。");
+        }
+
+        int 记录数 = BitConverter.ToInt32(源文本, 12);
+        int 记录头偏移 = 16;
+        if (记录数 <= 0 || 记录头偏移 + 8 > 源文本.Length)
+        {
+            throw new InvalidDataException("STRTBL10 头部无效。");
+        }
+
+        int 每记录字段数 = BitConverter.ToInt32(源文本, 16);
+        if (每记录字段数 <= 0)
+        {
+            throw new InvalidDataException("字段数无效。");
+        }
+
+        List<int> 记录偏移组 = new List<int>(记录数);
+        for (int i = 0; i < 记录数; i++)
+        {
+            记录偏移组.Add(BitConverter.ToInt32(源文本, 记录头偏移 + i * 8 + 4));
+        }
+
+        List<List<int>> 数值图 = new List<List<int>>(记录数);
+        int 最大宽度 = 0;
+        int 最大数值 = 0;
+
+        foreach (int 记录偏移 in 记录偏移组)
+        {
+            List<int> 当前行 = new List<int>();
+            for (int i = 0; i < 每记录字段数; i++)
+            {
+                int 项偏移 = 记录偏移 + i * 8;
+                if (项偏移 + 8 > 源文本.Length)
+                {
+                    break;
+                }
+
+                int 长度 = BitConverter.ToInt32(源文本, 项偏移);
+                int 指针 = BitConverter.ToInt32(源文本, 项偏移 + 4);
+                string 数值串 = 读取STRTBL数值串(源文本, 指针, 长度);
+                if (数值串.Length == 0)
+                {
+                    当前行.Add(0);
+                    continue;
+                }
+
+                foreach (char 数字字符 in 数值串)
+                {
+                    int 数值 = 数字字符 - '0';
+                    当前行.Add(数值);
+                    if (数值 > 最大数值)
+                    {
+                        最大数值 = 数值;
+                    }
+                }
+            }
+
+            最大宽度 = Math.Max(最大宽度, 当前行.Count);
+            数值图.Add(当前行);
+        }
+
+        if (最大宽度 == 0)
+        {
+            throw new InvalidDataException("未能从 STRTBL10 中解析出任何可视化数据。");
+        }
+
+        byte[,] 灰度数据 = new byte[数值图.Count, 最大宽度];
+        for (int y = 0; y < 数值图.Count; y++)
+        {
+            List<int> 当前行 = 数值图[y];
+            for (int x = 0; x < 最大宽度; x++)
+            {
+                int 数值 = x < 当前行.Count ? 当前行[x] : 0;
+                灰度数据[y, x] = 数值 <= 1 || 最大数值 <= 1
+                    ? (byte)255
+                    : (byte)(255 - 数值 * 255 / 最大数值);
+            }
+        }
+
+        string 输出路径 = Path.GetFullPath(输入文件 + ".x4.bmp");
+        File.WriteAllBytes(输出路径, 生成24位BMP(灰度数据, 4));
+        return 输出路径;
+    }
+
     static void 确认ehppack可用()
     {
         if (string.IsNullOrWhiteSpace(ehppack目录))
@@ -205,20 +537,7 @@ public class 工具类
     public static IEnumerable<string> 获取Lj文件()
     {
         return Directory.EnumerateFiles(解包目录, "*.*", SearchOption.AllDirectories)
-            .Where(file =>
-            {
-                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file);
-                return (file.EndsWith(".bin") || file.EndsWith(".gz"))
-                    && (fileNameWithoutExtension.Contains("Lj") || fileNameWithoutExtension.Contains("bl"))
-                    // 筛掉声音
-                    && !fileNameWithoutExtension.Contains("voice")
-                    // 筛掉其它5门语言，只保留日语
-                    && !fileNameWithoutExtension.EndsWith("bl_e")
-                    && !fileNameWithoutExtension.EndsWith("bl_f")
-                    && !fileNameWithoutExtension.EndsWith("bl_g")
-                    && !fileNameWithoutExtension.EndsWith("bl_i")
-                    && !fileNameWithoutExtension.EndsWith("bl_s");
-            });
+            .Where(是文本候选文件);
     }
 
     public static IEnumerable<string> 获取bin与gz文件()
@@ -234,31 +553,16 @@ public class 工具类
 
     public static void Lj台词转换为TXT(string 当前文件路径)
     {
-        string 扩展名 = Path.GetExtension(当前文件路径);
-        byte[] 源文本;
-        if (扩展名 == ".gz")
-        {
-            using (var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress))
-            {
-                var ms = new MemoryStream();
-                file.CopyTo(ms);
-                源文本 = ms.ToArray();
-            }
-        }
-        else
-        {
-            源文本 = File.ReadAllBytes(当前文件路径);
-        }
+        byte[] 源文本 = 读取文本源字节(当前文件路径);
         string 相对路径 = 获取相对路径(当前文件路径, 解包目录);
         // 保留原扩展名，直接在后面加txt，方便将来转回bin和gz
         string 输出路径 = Path.Combine(TXT目录, 相对路径) + ".txt";
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
-        bool 有日语字符 = false;
+        List<string> 原文条目 = new();
         StringBuilder sb = new StringBuilder();
-        int index = 0;
-        int bias = 当前文件路径.Contains("bl") ? BitConverter.ToInt32(源文本, 8) : 0;
-        index += bias;
+        StringBuilder 当前条目 = new();
+        int index = 获取文本起始偏移(当前文件路径, 源文本);
         while (index < 源文本.Length)
         {
             int count = index + 2 <= 源文本.Length ? 2 : 源文本.Length - index;
@@ -266,21 +570,20 @@ public class 工具类
             if (双字节 == "\n")
                 sb.Append("\n-----\n");
             else if (双字节 == "\0")
+            {
                 sb.Append("\n*****\n");
+                原文条目.Add(当前条目.ToString());
+                当前条目.Clear();
+            }
             else
             {
                 sb.Append(双字节);
-                if (有日语字符 ||
-                    (双字节.CompareTo("\u3040") >= 0 && 双字节.CompareTo("\u309F") <= 0) || // Hiragana
-                    (双字节.CompareTo("\u30A0") >= 0 && 双字节.CompareTo("\u30FF") <= 0))   // Katakana
-                {
-                    有日语字符 = true;
-                }
+                当前条目.Append(双字节);
             }
             index += 2;
         }
 
-        if (有日语字符)
+        if (值得导出为文本(原文条目))
         {
             using (var 输出文本 = new StreamWriter(输出路径, false, Encoding.Unicode))
             {
@@ -291,26 +594,10 @@ public class 工具类
 
     public static string? 返回搜索结果文件名(string 当前文件路径, string 关键字)
     {
-        string 扩展名 = Path.GetExtension(当前文件路径);
-        byte[] 源文本;
-        if (扩展名 == ".gz")
-        {
-            using (var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress))
-            {
-                var ms = new MemoryStream();
-                file.CopyTo(ms);
-                源文本 = ms.ToArray();
-            }
-        }
-        else
-        {
-            源文本 = File.ReadAllBytes(当前文件路径);
-        }
+        byte[] 源文本 = 读取文本源字节(当前文件路径);
 
         StringBuilder sb = new();
-        int index = 0;
-        int bias = 当前文件路径.Contains("bl") ? BitConverter.ToInt32(源文本, 8) : 0;
-        index += bias;
+        int index = 获取文本起始偏移(当前文件路径, 源文本);
         while (index < 源文本.Length)
         {
             int count = index + 2 <= 源文本.Length ? 2 : 源文本.Length - index;
@@ -336,32 +623,15 @@ public class 工具类
 
     public static void Lj台词转换为JSON(string 当前文件路径)
     {
-        string 扩展名 = Path.GetExtension(当前文件路径);
-        byte[] 源文本;
-        if (扩展名 == ".gz")
-        {
-            using (var file = new GZipStream(File.OpenRead(当前文件路径), CompressionMode.Decompress))
-            {
-                var ms = new MemoryStream();
-                file.CopyTo(ms);
-                源文本 = ms.ToArray();
-            }
-        }
-        else
-        {
-            源文本 = File.ReadAllBytes(当前文件路径);
-        }
+        byte[] 源文本 = 读取文本源字节(当前文件路径);
         string 相对路径 = 获取相对路径(当前文件路径, 解包目录);
         // 保留原扩展名，直接在后面加txt，方便将来转回bin和gz
         string 输出路径 = Path.Combine(JSON目录, 相对路径) + ".json";
         if (!Directory.Exists(Path.GetDirectoryName(输出路径))) Directory.CreateDirectory(Path.GetDirectoryName(输出路径));
 
         List<string> 原文条目 = new List<string>();
-        bool 有日语字符 = false;
         StringBuilder sb = new();
-        int index = 0;
-        int bias = 当前文件路径.Contains("bl") ? BitConverter.ToInt32(源文本, 8) : 0;
-        index += bias;
+        int index = 获取文本起始偏移(当前文件路径, 源文本);
         while (index < 源文本.Length)
         {
             int count = index + 2 <= 源文本.Length ? 2 : 源文本.Length - index;
@@ -376,17 +646,11 @@ public class 工具类
             else
             {
                 sb.Append(双字节);
-                if (有日语字符 ||
-                    (双字节.CompareTo("\u3040") >= 0 && 双字节.CompareTo("\u309F") <= 0) || // Hiragana
-                    (双字节.CompareTo("\u30A0") >= 0 && 双字节.CompareTo("\u30FF") <= 0))   // Katakana
-                {
-                    有日语字符 = true;
-                }
             }
             index += 2;
         }
 
-        if (有日语字符)
+        if (值得导出为文本(原文条目))
         {
             var jobj = 原文条目.Select((item, index) => new JObject
             {
@@ -405,9 +669,9 @@ public class 工具类
     public static void JSON转换为Lj台词(string 当前文件路径)
     {
         string 短文件名 = Path.GetFileNameWithoutExtension(当前文件路径);
-        bool 是bl = 短文件名.Contains("bl");
+        bool 是bl = 是偏移文本表(当前文件路径);
         bool 是gz = 短文件名.EndsWith(".gz");
-        bool 是LJ = 短文件名.Contains("Lj");
+        bool 是LJ = 是Lj文本文件(当前文件路径);
 
         string 相对路径 = 获取相对路径(当前文件路径, JSON目录);
         string 输出路径 = Path.Combine(BIN目录, 相对路径);
